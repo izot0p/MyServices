@@ -414,274 +414,334 @@
     <div class="toast" id="toast"></div>
 
     <script>
-        // ====== Telegram Web App ======
-        const tg = window.Telegram?.WebApp;
-        if (tg) {
-            tg.ready();
-            tg.expand(); // Разворачиваем на весь экран
-            // Адаптация под тему Telegram
+    // ====== Telegram Web App ======
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+        tg.ready();
+        tg.expand();
+        if (tg.colorScheme === 'light') {
+            document.body.classList.add('tg-light');
+        }
+        tg.onEvent('themeChanged', () => {
             if (tg.colorScheme === 'light') {
                 document.body.classList.add('tg-light');
+            } else {
+                document.body.classList.remove('tg-light');
             }
-            tg.onEvent('themeChanged', () => {
-                if (tg.colorScheme === 'light') {
-                    document.body.classList.add('tg-light');
+        });
+    }
+
+    // ====== Данные с защитой ======
+    const storageKey = tg?.initDataUnsafe?.user?.id 
+        ? `myServices_${tg.initDataUnsafe.user.id}` 
+        : 'myServices_default';
+    
+    let services = [];
+    
+    // Безопасная загрузка с резервной копией
+    function loadServices() {
+        try {
+            const raw = localStorage.getItem(storageKey);
+            if (raw) {
+                services = JSON.parse(raw);
+                if (!Array.isArray(services)) services = [];
+            } else {
+                services = [];
+            }
+        } catch (e) {
+            console.error('Ошибка загрузки, пробуем backup:', e);
+            // Пробуем загрузить резервную копию
+            try {
+                const backup = localStorage.getItem(storageKey + '_backup');
+                if (backup) {
+                    services = JSON.parse(backup);
+                    if (!Array.isArray(services)) services = [];
                 } else {
-                    document.body.classList.remove('tg-light');
+                    services = [];
                 }
-            });
+            } catch (e2) {
+                services = [];
+            }
         }
+    }
 
-        // ====== Данные ======
-        // Ключ localStorage уникальный для каждого пользователя Telegram
-        const storageKey = tg?.initDataUnsafe?.user?.id 
-            ? `myServices_${tg.initDataUnsafe.user.id}` 
-            : 'myServices_default';
+    function saveServices() {
+        try {
+            const json = JSON.stringify(services);
+            localStorage.setItem(storageKey, json);
+            // Резервная копия на случай повреждения основных данных
+            localStorage.setItem(storageKey + '_backup', json);
+        } catch (e) {
+            console.error('Ошибка сохранения:', e);
+            showToast('⚠️ Ошибка сохранения');
+        }
+    }
+
+    // Загружаем данные сразу
+    loadServices();
+    
+    // Принудительно перерендерим после полной загрузки страницы
+    window.addEventListener('load', () => {
+        loadServices(); // Перезагружаем на всякий случай
+        renderServices();
+    });
+
+    // И ещё раз через небольшую задержку (для Telegram WebView)
+    setTimeout(() => {
+        loadServices();
+        renderServices();
+    }, 300);
+
+    let currentFilter = 'all';
+
+    document.getElementById('serviceDate').value = new Date().toISOString().split('T')[0];
+
+    function showToast(text) {
+        const toast = document.getElementById('toast');
+        if (!toast) return;
+        toast.textContent = text;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+
+    function addService() {
+        loadServices(); // Перезагружаем перед добавлением
         
-        let services = JSON.parse(localStorage.getItem(storageKey) || '[]');
-        let currentFilter = 'all';
+        const name = document.getElementById('serviceName').value.trim();
+        const date = document.getElementById('serviceDate').value;
+        const type = document.getElementById('serviceType').value;
 
-        document.getElementById('serviceDate').value = new Date().toISOString().split('T')[0];
+        if (!name) { showToast('Введите название'); return; }
+        if (!date) { showToast('Выберите дату'); return; }
 
-        function saveServices() {
-            localStorage.setItem(storageKey, JSON.stringify(services));
+        services.push({
+            id: Date.now(),
+            name,
+            endDate: date,
+            type
+        });
+
+        services.sort((a, b) => new Date(a.endDate) - new Date(b.endDate));
+        saveServices();
+        renderServices();
+        
+        document.getElementById('serviceName').value = '';
+        document.getElementById('serviceName').focus();
+        showToast('✅ Добавлено');
+        
+        if (tg?.HapticFeedback) {
+            tg.HapticFeedback.notificationOccurred('success');
         }
+    }
 
-        function showToast(text) {
-            const toast = document.getElementById('toast');
-            toast.textContent = text;
-            toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 2000);
-        }
-
-        function addService() {
-            const name = document.getElementById('serviceName').value.trim();
-            const date = document.getElementById('serviceDate').value;
-            const type = document.getElementById('serviceType').value;
-
-            if (!name) { showToast('Введите название'); return; }
-            if (!date) { showToast('Выберите дату'); return; }
-
-            services.push({
-                id: Date.now(),
-                name,
-                endDate: date,
-                type
-            });
-
-            services.sort((a, b) => new Date(a.endDate) - new Date(b.endDate));
+    function deleteService(id) {
+        loadServices(); // Перезагружаем перед удалением
+        
+        if (confirm('Удалить услугу?')) {
+            services = services.filter(s => s.id !== id);
             saveServices();
             renderServices();
-            
-            document.getElementById('serviceName').value = '';
-            document.getElementById('serviceName').focus();
-            showToast('✅ Добавлено');
-            
-            // Вибрация на телефоне (если доступно)
+            showToast('🗑 Удалено');
             if (tg?.HapticFeedback) {
-                tg.HapticFeedback.notificationOccurred('success');
+                tg.HapticFeedback.notificationOccurred('warning');
             }
         }
+    }
 
-        function deleteService(id) {
-            if (confirm('Удалить услугу?')) {
-                services = services.filter(s => s.id !== id);
-                saveServices();
-                renderServices();
-                showToast('🗑 Удалено');
-                if (tg?.HapticFeedback) {
-                    tg.HapticFeedback.notificationOccurred('warning');
-                }
-            }
+    function getDaysLeft(endDateStr) {
+        const endDate = new Date(endDateStr);
+        endDate.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+    }
+
+    function getStatus(daysLeft) {
+        if (daysLeft < 0) return 'danger';
+        if (daysLeft <= 30) return 'warning';
+        return 'ok';
+    }
+
+    function getStatusText(daysLeft) {
+        if (daysLeft < 0) return `Просрочено на ${Math.abs(daysLeft)} дн.`;
+        if (daysLeft === 0) return 'Сегодня!';
+        if (daysLeft === 1) return 'Завтра!';
+        if (daysLeft <= 30) return `${daysLeft} дн.`;
+        return `${daysLeft} дн.`;
+    }
+
+    function quickDate(days) {
+        const dateInput = document.getElementById('serviceDate');
+        const futureDate = new Date();
+        futureDate.setDate(futureDate.getDate() + days);
+        dateInput.value = futureDate.toISOString().split('T')[0];
+        dateInput.style.borderColor = '#4a90d9';
+        setTimeout(() => dateInput.style.borderColor = '', 300);
+    }
+
+    function setFilter(filter, btn) {
+        currentFilter = filter;
+        document.querySelectorAll('.filters button').forEach(b => b.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+        renderServices();
+    }
+
+    function renderServices() {
+        loadServices(); // Всегда загружаем актуальные данные
+        
+        let filtered = services;
+        if (currentFilter !== 'all') {
+            filtered = services.filter(s => s.type === currentFilter);
         }
 
-        function getDaysLeft(endDateStr) {
-            const endDate = new Date(endDateStr);
-            endDate.setHours(0, 0, 0, 0);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            return Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+        // Статистика
+        const allExpired = services.filter(s => getDaysLeft(s.endDate) < 0).length;
+        const allSoon = services.filter(s => { const d = getDaysLeft(s.endDate); return d >= 0 && d <= 30; }).length;
+        const allOk = services.filter(s => getDaysLeft(s.endDate) > 30).length;
+
+        const countExpiredEl = document.getElementById('countExpired');
+        const countSoonEl = document.getElementById('countSoon');
+        const countOkEl = document.getElementById('countOk');
+        if (countExpiredEl) countExpiredEl.textContent = allExpired;
+        if (countSoonEl) countSoonEl.textContent = allSoon;
+        if (countOkEl) countOkEl.textContent = allOk;
+
+        const listEl = document.getElementById('servicesList');
+        if (!listEl) {
+            console.error('servicesList не найден');
+            return;
         }
 
-        function getStatus(daysLeft) {
-            if (daysLeft < 0) return 'danger';
-            if (daysLeft <= 30) return 'warning';
-            return 'ok';
+        if (filtered.length === 0) {
+            listEl.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>${currentFilter === 'all' ? 'Список пуст' : 'Нет услуг этого типа'}</p></div>`;
+            return;
         }
 
-        function getStatusText(daysLeft) {
-            if (daysLeft < 0) return `Просрочено на ${Math.abs(daysLeft)} дн.`;
-            if (daysLeft === 0) return 'Сегодня!';
-            if (daysLeft === 1) return 'Завтра!';
-            if (daysLeft <= 30) return `${daysLeft} дн.`;
-            return `${daysLeft} дн.`;
-        }
+        const typeIcons = { domain: '🌐', hosting: '🖥', ssl: '🔒', other: '📦' };
+        const typeLabels = { domain: 'Домен', hosting: 'Хостинг', ssl: 'SSL', other: 'Другое' };
 
-        function setFilter(filter, btn) {
-            currentFilter = filter;
-            document.querySelectorAll('.filters button').forEach(b => b.classList.remove('active'));
-            if (btn) btn.classList.add('active');
-            renderServices();
-        }
-
-        function renderServices() {
-            let filtered = services;
-            if (currentFilter !== 'all') {
-                filtered = services.filter(s => s.type === currentFilter);
-            }
-
-            // Статистика
-            const allExpired = services.filter(s => getDaysLeft(s.endDate) < 0).length;
-            const allSoon = services.filter(s => { const d = getDaysLeft(s.endDate); return d >= 0 && d <= 30; }).length;
-            const allOk = services.filter(s => getDaysLeft(s.endDate) > 30).length;
-
-            document.getElementById('countExpired').textContent = allExpired;
-            document.getElementById('countSoon').textContent = allSoon;
-            document.getElementById('countOk').textContent = allOk;
-
-            const listEl = document.getElementById('servicesList');
-
-            if (filtered.length === 0) {
-                listEl.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>${currentFilter === 'all' ? 'Список пуст' : 'Нет услуг этого типа'}</p></div>`;
-                return;
-            }
-
-            const typeIcons = { domain: '🌐', hosting: '🖥', ssl: '🔒', other: '📦' };
-            const typeLabels = { domain: 'Домен', hosting: 'Хостинг', ssl: 'SSL', other: 'Другое' };
-
-            listEl.innerHTML = filtered.map(s => {
-                const daysLeft = getDaysLeft(s.endDate);
-                const status = getStatus(daysLeft);
-                const endDateFormatted = new Date(s.endDate).toLocaleDateString('ru-RU', {
-                    day: 'numeric', month: 'long', year: 'numeric'
-                });
-                const statusClass = status === 'danger' ? 'expired' : status === 'warning' ? 'soon' : 'ok';
-
-                return `
-                <div class="service-card ${status}">
-                    <div class="service-icon ${s.type}">${typeIcons[s.type] || '📦'}</div>
-                    <div class="service-info">
-                        <div class="service-name">${escapeHtml(s.name)}</div>
-                        <div class="service-type-label">${typeLabels[s.type] || s.type}</div>
-                    </div>
-                    <div class="service-dates">
-                        <div class="end-date">${endDateFormatted}</div>
-                        <div class="days-left ${statusClass}">${getStatusText(daysLeft)}</div>
-                    </div>
-                    <button class="delete-btn" onclick="deleteService(${s.id})">✕</button>
-                </div>`;
-            }).join('');
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // ====== Push-уведомления ======
-        let notificationInterval = null;
-
-        async function enableNotifications() {
-            if (!('Notification' in window)) {
-                showToast('❌ Браузер не поддерживает уведомления');
-                return;
-            }
-
-            if (Notification.permission === 'granted') {
-                startNotificationCheck();
-                showToast('✅ Уведомления включены');
-                return;
-            }
-
-            if (Notification.permission === 'denied') {
-                showToast('❌ Уведомления заблокированы. Разрешите в настройках браузера');
-                return;
-            }
-
-            const permission = await Notification.requestPermission();
-            if (permission === 'granted') {
-                startNotificationCheck();
-                showToast('✅ Уведомления включены');
-            } else {
-                showToast('❌ Вы отклонили уведомления');
-            }
-        }
-
-        function startNotificationCheck() {
-            if (notificationInterval) clearInterval(notificationInterval);
-            
-            const notifiedKey = storageKey + '_notified';
-            let notifiedIds = JSON.parse(localStorage.getItem(notifiedKey) || '[]');
-            const notifyDays = parseInt(document.getElementById('notifyDays').value);
-
-            // Проверяем сразу
-            checkAndNotify(notifiedIds, notifiedKey, notifyDays);
-            
-            // И каждые 6 часов
-            notificationInterval = setInterval(() => {
-                notifiedIds = JSON.parse(localStorage.getItem(notifiedKey) || '[]');
-                checkAndNotify(notifiedIds, notifiedKey, notifyDays);
-            }, 6 * 60 * 60 * 1000);
-        }
-
-        function checkAndNotify(notifiedIds, notifiedKey, notifyDays) {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            
-            const expiringServices = services.filter(s => {
-                const daysLeft = getDaysLeft(s.endDate);
-                return daysLeft >= 0 && daysLeft <= notifyDays && !notifiedIds.includes(s.id);
+        listEl.innerHTML = filtered.map(s => {
+            const daysLeft = getDaysLeft(s.endDate);
+            const status = getStatus(daysLeft);
+            const endDateFormatted = new Date(s.endDate).toLocaleDateString('ru-RU', {
+                day: 'numeric', month: 'long', year: 'numeric'
             });
+            const statusClass = status === 'danger' ? 'expired' : status === 'warning' ? 'soon' : 'ok';
 
-            if (expiringServices.length > 0) {
-                const names = expiringServices.map(s => s.name).join(', ');
-                new Notification('⚠️ Истекают сроки услуг', {
-                    body: `До окончания менее ${notifyDays} дн.: ${names}`,
-                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📋</text></svg>',
-                    tag: 'service-expiry',
-                    requireInteraction: true
-                });
-                
-                // Помечаем как отправленные
-                expiringServices.forEach(s => notifiedIds.push(s.id));
-                localStorage.setItem(notifiedKey, JSON.stringify(notifiedIds));
-            }
+            return `
+            <div class="service-card ${status}">
+                <div class="service-icon ${s.type}">${typeIcons[s.type] || '📦'}</div>
+                <div class="service-info">
+                    <div class="service-name">${escapeHtml(s.name)}</div>
+                    <div class="service-type-label">${typeLabels[s.type] || s.type}</div>
+                </div>
+                <div class="service-dates">
+                    <div class="end-date">${endDateFormatted}</div>
+                    <div class="days-left ${statusClass}">${getStatusText(daysLeft)}</div>
+                </div>
+                <button class="delete-btn" onclick="deleteService(${s.id})">✕</button>
+            </div>`;
+        }).join('');
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // ====== Push-уведомления ======
+    let notificationInterval = null;
+
+    async function enableNotifications() {
+        if (!('Notification' in window)) {
+            showToast('❌ Браузер не поддерживает уведомления');
+            return;
         }
 
-        // Обновление интервала при смене настройки
-        document.getElementById('notifyDays').addEventListener('change', () => {
-            if (notificationInterval) {
-                const notifiedKey = storageKey + '_notified';
-                localStorage.removeItem(notifiedKey); // Сбрасываем историю при смене
-                startNotificationCheck();
-            }
-        });
-
-        // Проверяем, были ли уже разрешены уведомления
         if (Notification.permission === 'granted') {
             startNotificationCheck();
+            showToast('✅ Уведомления включены');
+            return;
         }
 
-        // Enter для добавления
-        document.getElementById('serviceName').addEventListener('keydown', e => {
-            if (e.key === 'Enter') addService();
-        });
-        document.getElementById('serviceDate').addEventListener('keydown', e => {
-            if (e.key === 'Enter') addService();
+        if (Notification.permission === 'denied') {
+            showToast('❌ Уведомления заблокированы');
+            return;
+        }
+
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+            startNotificationCheck();
+            showToast('✅ Уведомления включены');
+        } else {
+            showToast('❌ Вы отклонили уведомления');
+        }
+    }
+
+    function startNotificationCheck() {
+        if (notificationInterval) clearInterval(notificationInterval);
+        
+        const notifiedKey = storageKey + '_notified';
+        let notifiedIds = JSON.parse(localStorage.getItem(notifiedKey) || '[]');
+        const notifyDays = parseInt(document.getElementById('notifyDays')?.value || '14');
+
+        checkAndNotify(notifiedIds, notifiedKey, notifyDays);
+        
+        notificationInterval = setInterval(() => {
+            notifiedIds = JSON.parse(localStorage.getItem(notifiedKey) || '[]');
+            checkAndNotify(notifiedIds, notifiedKey, notifyDays);
+        }, 6 * 60 * 60 * 1000);
+    }
+
+    function checkAndNotify(notifiedIds, notifiedKey, notifyDays) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const expiringServices = services.filter(s => {
+            const daysLeft = getDaysLeft(s.endDate);
+            return daysLeft >= 0 && daysLeft <= notifyDays && !notifiedIds.includes(s.id);
         });
 
-        function quickDate(days) {
-            const dateInput = document.getElementById('serviceDate');
-            const futureDate = new Date();
-            futureDate.setDate(futureDate.getDate() + days);
-            dateInput.value = futureDate.toISOString().split('T')[0];
-                // Визуальная обратная связь
-            dateInput.style.borderColor = '#4a90d9';
-            setTimeout(() => dateInput.style.borderColor = '', 300);
+        if (expiringServices.length > 0) {
+            const names = expiringServices.map(s => s.name).join(', ');
+            new Notification('⚠️ Истекают сроки услуг', {
+                body: `До окончания менее ${notifyDays} дн.: ${names}`,
+                icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📋</text></svg>',
+                tag: 'service-expiry',
+                requireInteraction: true
+            });
+            
+            expiringServices.forEach(s => notifiedIds.push(s.id));
+            localStorage.setItem(notifiedKey, JSON.stringify(notifiedIds));
         }
-        // Первый рендер
-        renderServices();
-    </script>
+    }
+
+    document.getElementById('notifyDays')?.addEventListener('change', () => {
+        if (notificationInterval) {
+            const notifiedKey = storageKey + '_notified';
+            localStorage.removeItem(notifiedKey);
+            startNotificationCheck();
+        }
+    });
+
+    if (Notification.permission === 'granted') {
+        startNotificationCheck();
+    }
+
+    // Enter для добавления
+    document.getElementById('serviceName')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') addService();
+    });
+    document.getElementById('serviceDate')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') addService();
+    });
+
+    // Финальный рендер
+    renderServices();
+    
+    // Ещё одна попытка через небольшую паузу
+    setTimeout(renderServices, 500);
+</script>
 </body>
 </html>
