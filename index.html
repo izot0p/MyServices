@@ -342,20 +342,27 @@
         <h1>📋 Мои услуги</h1>
         <p class="subtitle">Контроль сроков доменов, хостинга, SSL</p>
 
-        <!-- Форма -->
-        <div class="add-form">
-            <input type="text" id="serviceName" placeholder="Название (например: site.ru)">
-            <div class="add-form-row">
-                <input type="date" id="serviceDate" style="flex:1">
-                <select id="serviceType" style="flex:1">
-                    <option value="domain">🌐 Домен</option>
-                    <option value="hosting">🖥 Хостинг</option>
-                    <option value="ssl">🔒 SSL</option>
-                    <option value="other">📦 Другое</option>
-                </select>
-            </div>
-            <button onclick="addService()">➕ Добавить услугу</button>
-        </div>
+<!-- Форма -->
+<div class="add-form">
+    <input type="text" id="serviceName" placeholder="Название (например: site.ru)" style="font-size: 16px; padding: 14px;">
+    <div class="add-form-row">
+        <input type="date" id="serviceDate" style="flex:2; font-size: 16px; padding: 14px; min-height: 48px;">
+        <select id="serviceType" style="flex:1; font-size: 16px; padding: 14px; min-height: 48px;">
+            <option value="domain">🌐 Домен</option>
+            <option value="hosting">🖥 Хостинг</option>
+            <option value="ssl">🔒 SSL</option>
+            <option value="other">📦 Другое</option>
+        </select>
+    </div>
+    <!-- Быстрые кнопки -->
+    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <button type="button" onclick="quickDate(30)" style="flex:1; background: var(--card); color: var(--text); border: 1px solid var(--border); padding: 10px; border-radius: 8px; cursor: pointer; font-size: 0.8em;">📅 +30 дней</button>
+        <button type="button" onclick="quickDate(90)" style="flex:1; background: var(--card); color: var(--text); border: 1px solid var(--border); padding: 10px; border-radius: 8px; cursor: pointer; font-size: 0.8em;">📅 +3 мес</button>
+        <button type="button" onclick="quickDate(180)" style="flex:1; background: var(--card); color: var(--text); border: 1px solid var(--border); padding: 10px; border-radius: 8px; cursor: pointer; font-size: 0.8em;">📅 +6 мес</button>
+        <button type="button" onclick="quickDate(365)" style="flex:1; background: var(--card); color: var(--text); border: 1px solid var(--border); padding: 10px; border-radius: 8px; cursor: pointer; font-size: 0.8em;">📅 +1 год</button>
+    </div>
+    <button onclick="addService()" style="margin-top: 4px;">➕ Добавить услугу</button>
+</div>
 
         <!-- Статистика -->
         <div class="stats">
@@ -664,6 +671,15 @@
             if (e.key === 'Enter') addService();
         });
 
+        function quickDate(days) {
+            const dateInput = document.getElementById('serviceDate');
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + days);
+            dateInput.value = futureDate.toISOString().split('T')[0];
+                // Визуальная обратная связь
+            dateInput.style.borderColor = '#4a90d9';
+            setTimeout(() => dateInput.style.borderColor = '', 300);
+        }
         // Первый рендер
         renderServices();
     </script>
